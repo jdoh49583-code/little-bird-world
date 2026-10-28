@@ -14,6 +14,23 @@
   #brand strong { display:block; font-size:15px; letter-spacing:.08em; }
   #brand span { font-size:12px; opacity:.85; font-style:italic; }
   #help { position:absolute; left:20px; bottom:20px; max-width:min(470px, calc(100vw - 40px)); padding:12px 14px; border:1px solid #ffffff55; border-radius:14px; background:#16354b77; backdrop-filter:blur(8px); font-size:13px; line-height:1.65; }
+  #controls { position:fixed; right:18px; bottom:18px; display:grid; grid-template-columns:repeat(3,54px); grid-template-rows:repeat(3,48px) 48px; gap:7px; pointer-events:auto; user-select:none; -webkit-user-select:none; touch-action:none; }
+  #controls button { padding:0; border-radius:14px; border:1px solid #ffffff88; background:#15384dcc; color:#fff; box-shadow:0 4px 12px #102a3b33; font-size:18px; touch-action:none; }
+  #controls button:active, #controls button.pressed { background:#f4e4b5; color:#17394a; transform:translateY(1px); }
+  #controls .up { grid-column:2; grid-row:1; }
+  #controls .left { grid-column:1; grid-row:2; }
+  #controls .down { grid-column:2; grid-row:2; }
+  #controls .right { grid-column:3; grid-row:2; }
+  #controls .jump { grid-column:1 / span 2; grid-row:3; font-size:14px; }
+  #controls .reset { grid-column:3; grid-row:3; font-size:13px; }
+  #controls .look { grid-column:1 / span 3; grid-row:4; font-size:12px; }
+  #controls button:focus-visible { outline:3px solid #fff2b8; outline-offset:3px; }
+  @media (max-width:600px) {
+    #brand { top:12px; left:12px; } #status { top:12px; right:12px; }
+    #help { left:12px; bottom:12px; max-width:calc(100vw - 190px); font-size:11px; padding:9px; }
+    #controls { right:10px; bottom:10px; grid-template-columns:repeat(3,46px); grid-template-rows:repeat(3,43px) 43px; gap:5px; }
+  }
+  body.in-game canvas:focus-visible { outline:3px solid #fff2b8; outline-offset:-3px; }
   #status { position:absolute; top:20px; right:20px; padding:9px 12px; border:1px solid #ffffff55; border-radius:12px; background:#16354b66; font-size:12px; }
   #center { position:absolute; left:50%; top:50%; width:7px; height:7px; border:1px solid #ffffffaa; border-radius:50%; transform:translate(-50%,-50%); opacity:.7; }
   #message { position:absolute; left:50%; top:18%; transform:translateX(-50%); padding:10px 15px; border-radius:12px; background:#16354bcc; font-size:14px; opacity:0; transition:opacity .2s; white-space:nowrap; }
@@ -32,15 +49,24 @@
 <body>
 <div id="hud">
   <div id="brand"><strong>BEYOND THE NEXT STEP</strong><span>An Island, and Ways.</span></div>
-  <div id="status">ALPHA 0.1 · STEP TEST</div>
+  <div id="status">ALPHA 0.2 · CONTROL TEST</div>
   <div id="center"></div>
   <div id="message"></div>
   <div id="help">
     <b>Move</b> <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span> / arrow keys
     &nbsp; <b>Jump</b> <span class="key">Space</span><br>
     <b>Look</b> move mouse after clicking the world · <b>Reset</b> <span class="key">R</span><br>
-    Reach the golden platform. Falling is part of the experiment.
+    Reach the golden platform. The safety floor returns you to the start.
   </div>
+</div>
+<div id="controls" aria-label="On-screen game controls">
+  <button class="up" data-key="KeyW" aria-label="Move forward">▲</button>
+  <button class="left" data-key="KeyA" aria-label="Move left">◀</button>
+  <button class="down" data-key="KeyS" aria-label="Move backward">▼</button>
+  <button class="right" data-key="KeyD" aria-label="Move right">▶</button>
+  <button class="jump" id="jumpButton">JUMP · SPACE</button>
+  <button class="reset" id="resetButton">RESET · R</button>
+  <button class="look" id="lookButton">MOUSE LOOK</button>
 </div>
 <div id="start">
   <div class="panel">
@@ -48,7 +74,7 @@
     <p class="subtitle">An Island, and Ways.</p>
     <p>A little world of floating steps.<br>Move, jump, land, and see what happens.</p>
     <button id="begin">Enter the island</button>
-    <small>Prototype Alpha 0.1 · Mouse look can be unlocked with Esc</small>
+    <small>Prototype Alpha 0.2 · Click the world for mouse look; press Esc to release it</small>
   </div>
 </div>
 <script type="module">
@@ -64,6 +90,8 @@ const camera = new THREE.PerspectiveCamera(76, innerWidth / innerHeight, 0.1, 16
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
+renderer.domElement.tabIndex = 0;
+renderer.domElement.setAttribute('aria-label', '3D island game. Click here to focus controls.');
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -102,6 +130,9 @@ addPlatform({x:0.4,y:1.95,z:-14.3,w:2.5,d:2.5,color:0x8fa9a2,rotX:0.05});
 addPlatform({x:-2.4,y:2.6,z:-18.1,w:2.6,d:2.6,color:0xa4b69a,rotZ:0.08});
 addPlatform({x:-1.3,y:3.25,z:-22.3,w:3.8,d:3.8,color:0xd7ad5d,goal:true});
 
+// A broad, low safety surface catches falls. Falling onto it returns the player to the start.
+addPlatform({x:0,y:-6.2,z:-10,w:90,d:90,h:0.5,color:0x8ab7c7});
+
 function addCloud(x,y,z,s) {
   const group = new THREE.Group();
   const mat = new THREE.MeshStandardMaterial({color:0xf5fbff,roughness:1});
@@ -121,20 +152,54 @@ const ballCollider = world.createCollider(RAPIER.ColliderDesc.ball(.42).setFrict
 
 const keys = new Set();
 let yaw = 0, pitch = -0.06, locked = false, grounded = false, jumpQueued = false;
-let lastY = 1.2, lastGrounded = 0, won = false;
+let lastY = 1.2, lastGrounded = 0, won = false, safetyReturnPending = false;
+const heldPointerKeys = new Set();
 const startOverlay = document.getElementById('start');
 const message = document.getElementById('message');
 let messageTimer;
 function say(text) { message.textContent = text; message.classList.add('show'); clearTimeout(messageTimer); messageTimer=setTimeout(()=>message.classList.remove('show'),2200); }
-function reset() {
+function reset(showMessage = true) {
   ballBody.setTranslation({x:0,y:1.2,z:0},true);
   ballBody.setLinvel({x:0,y:0,z:0},true); ballBody.setAngvel({x:0,y:0,z:0},true);
   ballBody.resetForces(true); ballBody.resetTorques(true);
-  yaw=0; pitch=-0.06; won=false; say('Back to the beginning. Try another route.');
+  yaw=0; pitch=-0.06; won=false; safetyReturnPending=false;
+  keys.clear(); controlButtons?.forEach(releaseButton);
+  if(showMessage) say('Back to the beginning. Try another route.');
 }
 document.getElementById('begin').addEventListener('click', () => {
   startOverlay.style.display='none';
+  document.body.classList.add('in-game');
+  renderer.domElement.focus({preventScroll:true});
+  // Pointer lock is optional; movement also works with the visible buttons.
   renderer.domElement.requestPointerLock?.();
+});
+
+const controlButtons = [...document.querySelectorAll('#controls [data-key]')];
+function releaseButton(button) {
+  const code = button.dataset.key;
+  if(code) keys.delete(code);
+  button.classList.remove('pressed');
+}
+for (const button of controlButtons) {
+  const code = button.dataset.key;
+  button.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    button.setPointerCapture?.(e.pointerId);
+    keys.add(code);
+    button.classList.add('pressed');
+  });
+  for (const eventName of ['pointerup','pointercancel','lostpointercapture','pointerleave']) {
+    button.addEventListener(eventName, () => releaseButton(button));
+  }
+}
+document.getElementById('jumpButton').addEventListener('pointerdown', e => {
+  e.preventDefault();
+  jumpQueued = true;
+});
+document.getElementById('resetButton').addEventListener('click', () => reset());
+document.getElementById('lookButton').addEventListener('click', () => {
+  if(!locked) renderer.domElement.requestPointerLock?.();
+  else document.exitPointerLock?.();
 });
 document.addEventListener('pointerlockchange',()=>{locked=document.pointerLockElement===renderer.domElement;});
 document.addEventListener('mousemove',e=>{
@@ -150,6 +215,10 @@ document.addEventListener('keydown',e=>{
   if(e.code==='KeyR') reset();
 });
 document.addEventListener('keyup',e=>keys.delete(e.code));
+window.addEventListener('blur', () => {
+  keys.clear();
+  controlButtons.forEach(releaseButton);
+});
 document.addEventListener('pointerlockerror',()=>say('Click the world to enable mouse look.'));
 renderer.domElement.addEventListener('click',()=>{if(startOverlay.style.display==='none' && !locked) renderer.domElement.requestPointerLock?.();});
 
@@ -197,7 +266,11 @@ function animate() {
     world.step();
     accumulator-=1/60;
     const next=ballBody.translation();
-    if(next.y < -12) reset();
+    if(next.y < -5.5 && !safetyReturnPending) {
+      safetyReturnPending = true;
+      say('Safety floor! Returning to the start…');
+      setTimeout(() => reset(false), 650);
+    }
     if(!won && next.z < -20.5 && next.x > -3.3 && next.x < 1.0 && next.y > 2.6) {
       won=true; say('You made it! Or wander around and experiment.');
     }

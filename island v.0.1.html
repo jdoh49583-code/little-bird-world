@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Beyond the Next Step — An Island, and Ways.</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #9bc9df; font-family: system-ui, -apple-system, Segoe UI, sans-serif; }
+  canvas { display:block; }
+  #hud { position:fixed; inset:0; pointer-events:none; color:#fff; text-shadow:0 2px 6px #15344f99; }
+  #brand { position:absolute; top:18px; left:20px; }
+  #brand strong { display:block; font-size:15px; letter-spacing:.08em; }
+  #brand span { font-size:12px; opacity:.85; font-style:italic; }
+  #help { position:absolute; left:20px; bottom:20px; max-width:min(470px, calc(100vw - 40px)); padding:12px 14px; border:1px solid #ffffff55; border-radius:14px; background:#16354b77; backdrop-filter:blur(8px); font-size:13px; line-height:1.65; }
+  #status { position:absolute; top:20px; right:20px; padding:9px 12px; border:1px solid #ffffff55; border-radius:12px; background:#16354b66; font-size:12px; }
+  #center { position:absolute; left:50%; top:50%; width:7px; height:7px; border:1px solid #ffffffaa; border-radius:50%; transform:translate(-50%,-50%); opacity:.7; }
+  #message { position:absolute; left:50%; top:18%; transform:translateX(-50%); padding:10px 15px; border-radius:12px; background:#16354bcc; font-size:14px; opacity:0; transition:opacity .2s; white-space:nowrap; }
+  #message.show { opacity:1; }
+  #start { position:fixed; inset:0; display:grid; place-items:center; background:linear-gradient(#14374c66,#14374caa); color:#fff; }
+  #start .panel { width:min(440px, calc(100vw - 32px)); padding:26px; text-align:center; border:1px solid #ffffff66; border-radius:22px; background:#15384ddf; box-shadow:0 18px 70px #102a3b55; }
+  #start h1 { margin:0 0 8px; font-size:clamp(25px,5vw,36px); line-height:1.1; }
+  #start .subtitle { margin:0 0 20px; opacity:.82; font-style:italic; }
+  #start p { font-size:14px; line-height:1.7; opacity:.92; }
+  button { pointer-events:auto; border:0; border-radius:999px; padding:12px 20px; font:inherit; font-weight:700; color:#17394a; background:#f4e4b5; cursor:pointer; }
+  button:hover { background:#fff0c8; }
+  #start small { display:block; margin-top:14px; opacity:.65; font-size:11px; }
+  .key { display:inline-block; min-width:22px; padding:0 5px; margin:0 1px; border:1px solid #ffffff66; border-radius:5px; text-align:center; background:#ffffff16; }
+</style>
+</head>
+<body>
+<div id="hud">
+  <div id="brand"><strong>BEYOND THE NEXT STEP</strong><span>An Island, and Ways.</span></div>
+  <div id="status">ALPHA 0.1 · STEP TEST</div>
+  <div id="center"></div>
+  <div id="message"></div>
+  <div id="help">
+    <b>Move</b> <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span> / arrow keys
+    &nbsp; <b>Jump</b> <span class="key">Space</span><br>
+    <b>Look</b> move mouse after clicking the world · <b>Reset</b> <span class="key">R</span><br>
+    Reach the golden platform. Falling is part of the experiment.
+  </div>
+</div>
+<div id="start">
+  <div class="panel">
+    <h1>Beyond the Next Step</h1>
+    <p class="subtitle">An Island, and Ways.</p>
+    <p>A little world of floating steps.<br>Move, jump, land, and see what happens.</p>
+    <button id="begin">Enter the island</button>
+    <small>Prototype Alpha 0.1 · Mouse look can be unlocked with Esc</small>
+  </div>
+</div>
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.166.1/build/three.module.js';
+import RAPIER from 'https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.14.0/+esm';
+
+await RAPIER.init();
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x9bc9df);
+scene.fog = new THREE.Fog(0x9bc9df, 28, 90);
+const camera = new THREE.PerspectiveCamera(76, innerWidth / innerHeight, 0.1, 160);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+scene.add(new THREE.HemisphereLight(0xe4f7ff, 0x536a58, 2.0));
+const sun = new THREE.DirectionalLight(0xfff0d1, 2.5);
+sun.position.set(-8, 16, 10); sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -28; sun.shadow.camera.right = 28;
+sun.shadow.camera.top = 28; sun.shadow.camera.bottom = -28;
+scene.add(sun);
+
+const world = new RAPIER.World({ x: 0, y: -14, z: 0 });
+world.timestep = 1 / 60;
+const fixed = [];
+function addPlatform({x,y,z,w,d,h=0.7, color=0x789b86, rotZ=0, rotX=0, goal=false}) {
+  const geo = new THREE.BoxGeometry(w,h,d);
+  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.88, metalness: 0.02 });
+  const mesh = new THREE.Mesh(geo,mat);
+  mesh.position.set(x,y,z); mesh.rotation.set(rotX,0,rotZ); mesh.castShadow = true; mesh.receiveShadow = true; scene.add(mesh);
+  const body = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(x,y,z).setRotation(new THREE.Quaternion().setFromEuler(new THREE.Euler(rotX,0,rotZ))));
+  world.createCollider(RAPIER.ColliderDesc.cuboid(w/2,h/2,d/2).setFriction(1.25).setRestitution(0.0), body);
+  fixed.push(mesh);
+  if (goal) {
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(1.05,0.09,12,40), new THREE.MeshStandardMaterial({color:0xffd36a, emissive:0x6a3a00, emissiveIntensity:.35, roughness:.45}));
+    ring.rotation.x = Math.PI/2; ring.position.set(x,y+h/2+0.12,z); scene.add(ring);
+    const glow = new THREE.PointLight(0xffd36a, 2.2, 7); glow.position.set(x,y+2,z); scene.add(glow);
+  }
+  return mesh;
+}
+addPlatform({x:0,y:0,z:0,w:7,d:7,h:1.0,color:0x73977d});
+addPlatform({x:0.6,y:0.6,z:-6,w:3.2,d:3.2,color:0x8eaa91});
+addPlatform({x:2.9,y:1.25,z:-10.2,w:2.5,d:2.5,color:0x9aaf93,rotZ:-0.07});
+addPlatform({x:0.4,y:1.95,z:-14.3,w:2.5,d:2.5,color:0x8fa9a2,rotX:0.05});
+addPlatform({x:-2.4,y:2.6,z:-18.1,w:2.6,d:2.6,color:0xa4b69a,rotZ:0.08});
+addPlatform({x:-1.3,y:3.25,z:-22.3,w:3.8,d:3.8,color:0xd7ad5d,goal:true});
+
+function addCloud(x,y,z,s) {
+  const group = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({color:0xf5fbff,roughness:1});
+  for (const [dx,dy,dz,r] of [[0,0,0,1],[1.1,.1,0,.75],[-.9,-.05,.1,.65],[.25,.45,0,.7]]) {
+    const m = new THREE.Mesh(new THREE.IcosahedronGeometry(r*s,1),mat);
+    m.position.set(dx*s,dy*s,dz*s); group.add(m);
+  }
+  group.position.set(x,y,z); scene.add(group);
+}
+addCloud(-9,9,-10,1.3); addCloud(8,12,-19,1.5); addCloud(10,7,2,1.0); addCloud(-6,14,-29,1.4);
+
+const ballGeo = new THREE.SphereGeometry(.42, 28, 20);
+const ballMat = new THREE.MeshStandardMaterial({color:0xe8e5d6,roughness:.4,metalness:.05});
+const ballMesh = new THREE.Mesh(ballGeo,ballMat); ballMesh.castShadow = true; scene.add(ballMesh);
+const ballBody = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(0,1.2,0).setLinearDamping(.35).setAngularDamping(.55).setCcdEnabled(true));
+const ballCollider = world.createCollider(RAPIER.ColliderDesc.ball(.42).setFriction(1.35).setRestitution(.0).setMass(1.0), ballBody);
+
+const keys = new Set();
+let yaw = 0, pitch = -0.06, locked = false, grounded = false, jumpQueued = false;
+let lastY = 1.2, lastGrounded = 0, won = false;
+const startOverlay = document.getElementById('start');
+const message = document.getElementById('message');
+let messageTimer;
+function say(text) { message.textContent = text; message.classList.add('show'); clearTimeout(messageTimer); messageTimer=setTimeout(()=>message.classList.remove('show'),2200); }
+function reset() {
+  ballBody.setTranslation({x:0,y:1.2,z:0},true);
+  ballBody.setLinvel({x:0,y:0,z:0},true); ballBody.setAngvel({x:0,y:0,z:0},true);
+  ballBody.resetForces(true); ballBody.resetTorques(true);
+  yaw=0; pitch=-0.06; won=false; say('Back to the beginning. Try another route.');
+}
+document.getElementById('begin').addEventListener('click', () => {
+  startOverlay.style.display='none';
+  renderer.domElement.requestPointerLock?.();
+});
+document.addEventListener('pointerlockchange',()=>{locked=document.pointerLockElement===renderer.domElement;});
+document.addEventListener('mousemove',e=>{
+  if(!locked) return;
+  yaw -= e.movementX * .0022;
+  pitch -= e.movementY * .0018;
+  pitch = THREE.MathUtils.clamp(pitch,-1.05,.65);
+});
+document.addEventListener('keydown',e=>{
+  if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
+  keys.add(e.code);
+  if(e.code==='Space' && !e.repeat) jumpQueued=true;
+  if(e.code==='KeyR') reset();
+});
+document.addEventListener('keyup',e=>keys.delete(e.code));
+document.addEventListener('pointerlockerror',()=>say('Click the world to enable mouse look.'));
+renderer.domElement.addEventListener('click',()=>{if(startOverlay.style.display==='none' && !locked) renderer.domElement.requestPointerLock?.();});
+
+const down = new THREE.Vector3(0,-1,0);
+const ray = new RAPIER.Ray({x:0,y:0,z:0},{x:0,y:-1,z:0});
+function checkGround(p) {
+  const hit = world.castRay(ray, .62, true, undefined, undefined, undefined, ballBody);
+  return !!hit;
+}
+const clock = new THREE.Clock();
+let accumulator=0;
+function animate() {
+  requestAnimationFrame(animate);
+  const dt=Math.min(clock.getDelta(),.04);
+  accumulator+=dt;
+  // Physics is stepped in fixed increments for stable landings.
+  while(accumulator>=1/60) {
+    const p=ballBody.translation();
+    ray.origin={x:p.x,y:p.y-.25,z:p.z};
+    grounded=checkGround(p);
+    if(grounded) lastGrounded=performance.now();
+    const forward = new THREE.Vector3(-Math.sin(yaw),0,-Math.cos(yaw));
+    const right = new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw));
+    let move = new THREE.Vector3();
+    if(keys.has('KeyW')||keys.has('ArrowUp')) move.add(forward);
+    if(keys.has('KeyS')||keys.has('ArrowDown')) move.sub(forward);
+    if(keys.has('KeyD')||keys.has('ArrowRight')) move.add(right);
+    if(keys.has('KeyA')||keys.has('ArrowLeft')) move.sub(right);
+    if(move.lengthSq()>0) move.normalize();
+    const vel=ballBody.linvel();
+    const accel=grounded?21:7.5;
+    ballBody.applyImpulse({x:move.x*accel/60,y:0,z:move.z*accel/60},true);
+    // Gentle speed cap keeps the small course controllable.
+    const v=ballBody.linvel(), horizontal=Math.hypot(v.x,v.z), max=grounded?6.2:5.4;
+    if(horizontal>max) ballBody.setLinvel({x:v.x*max/horizontal,y:v.y,z:v.z*max/horizontal},true);
+    if(jumpQueued) {
+      if(grounded || performance.now()-lastGrounded<115) {
+        const current=ballBody.linvel();
+        ballBody.setLinvel({x:current.x,y:0,z:current.z},true);
+        ballBody.applyImpulse({x:0,y:7.6,z:0},true);
+        say('Jump!');
+      }
+      jumpQueued=false;
+    }
+    world.step();
+    accumulator-=1/60;
+    const next=ballBody.translation();
+    if(next.y < -12) reset();
+    if(!won && next.z < -20.5 && next.x > -3.3 && next.x < 1.0 && next.y > 2.6) {
+      won=true; say('You made it! Or wander around and experiment.');
+    }
+  }
+  const p=ballBody.translation();
+  ballMesh.position.set(p.x,p.y,p.z);
+  const eye = new THREE.Vector3(p.x,p.y+.18,p.z);
+  camera.position.copy(eye);
+  const lookDir = new THREE.Vector3(-Math.sin(yaw)*Math.cos(pitch),Math.sin(pitch),-Math.cos(yaw)*Math.cos(pitch));
+  camera.lookAt(eye.clone().add(lookDir.multiplyScalar(12)));
+  // Small, intentional horizon tilt is avoided: the view stays comfortable.
+  renderer.render(scene,camera);
+}
+animate();
+
+addEventListener('resize',()=>{
+  camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight);
+});
+</script>
+</body>
+</html>
