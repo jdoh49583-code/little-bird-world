@@ -74,7 +74,7 @@
     <p class="subtitle">An Island, and Ways.</p>
     <p>A little world of floating steps.<br>Move, jump, land, and see what happens.</p>
     <button id="begin">Enter the island</button>
-    <small>Prototype Alpha 0.2 · Click the world for mouse look; press Esc to release it</small>
+    <small>Prototype Alpha 0.2 · Click empty world to resume camera look; Alt releases the cursor</small>
   </div>
 </div>
 <script type="module">
@@ -198,8 +198,19 @@ document.getElementById('jumpButton').addEventListener('pointerdown', e => {
 });
 document.getElementById('resetButton').addEventListener('click', () => reset());
 document.getElementById('lookButton').addEventListener('click', () => {
+  // This button only releases the cursor; click the world (not a UI control) to resume camera look.
+  if(locked) document.exitPointerLock?.();
+  say('Cursor free. Click an empty part of the world to resume camera look.');
+});
+
+// Clicking empty world space resumes pointer lock. UI controls are excluded so their clicks
+// never unexpectedly recapture the cursor or rotate the camera.
+renderer.domElement.addEventListener('click', () => {
+  if(startOverlay.style.display !== 'none') return;
   if(!locked) renderer.domElement.requestPointerLock?.();
-  else document.exitPointerLock?.();
+});
+document.getElementById('controls').addEventListener('click', e => {
+  e.stopPropagation();
 });
 document.addEventListener('pointerlockchange',()=>{locked=document.pointerLockElement===renderer.domElement;});
 document.addEventListener('mousemove',e=>{
