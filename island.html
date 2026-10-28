@@ -108,10 +108,35 @@ scene.add(sun);
 const world = new RAPIER.World({ x: 0, y: -14, z: 0 });
 world.timestep = 1 / 60;
 const fixed = [];
+// A quiet checker grid on platform tops makes small movements easier to read.
+const gridCanvas = document.createElement('canvas');
+gridCanvas.width = gridCanvas.height = 256;
+const gridCtx = gridCanvas.getContext('2d');
+const cell = 32;
+for (let gy = 0; gy < 8; gy++) {
+  for (let gx = 0; gx < 8; gx++) {
+    gridCtx.fillStyle = ((gx + gy) % 2 === 0) ? '#d8e6cf' : '#a9c9b5';
+    gridCtx.fillRect(gx * cell, gy * cell, cell, cell);
+  }
+}
+gridCtx.strokeStyle = 'rgba(39, 75, 75, 0.42)';
+gridCtx.lineWidth = 2;
+for (let g = 0; g <= 8; g++) {
+  gridCtx.beginPath(); gridCtx.moveTo(g * cell, 0); gridCtx.lineTo(g * cell, 256); gridCtx.stroke();
+  gridCtx.beginPath(); gridCtx.moveTo(0, g * cell); gridCtx.lineTo(256, g * cell); gridCtx.stroke();
+}
+const gridTexture = new THREE.CanvasTexture(gridCanvas);
+gridTexture.wrapS = gridTexture.wrapT = THREE.RepeatWrapping;
+gridTexture.colorSpace = THREE.SRGBColorSpace;
 function addPlatform({x,y,z,w,d,h=0.7, color=0x789b86, rotZ=0, rotX=0, goal=false}) {
   const geo = new THREE.BoxGeometry(w,h,d);
-  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.88, metalness: 0.02 });
-  const mesh = new THREE.Mesh(geo,mat);
+  const sideMat = new THREE.MeshStandardMaterial({ color, roughness: 0.88, metalness: 0.02 });
+  const topTexture = gridTexture.clone();
+  topTexture.repeat.set(Math.max(1, w / 1.5), Math.max(1, d / 1.5));
+  topTexture.needsUpdate = true;
+  const topMat = new THREE.MeshStandardMaterial({ map: topTexture, color: goal ? 0xffe1a0 : 0xffffff, roughness: 0.88, metalness: 0.02 });
+  // BoxGeometry material order: +x, -x, +y (top), -y, +z, -z.
+  const mesh = new THREE.Mesh(geo,[sideMat,sideMat,topMat,sideMat,sideMat,sideMat]);
   mesh.position.set(x,y,z); mesh.rotation.set(rotX,0,rotZ); mesh.castShadow = true; mesh.receiveShadow = true; scene.add(mesh);
   const body = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(x,y,z).setRotation(new THREE.Quaternion().setFromEuler(new THREE.Euler(rotX,0,rotZ))));
   world.createCollider(RAPIER.ColliderDesc.cuboid(w/2,h/2,d/2).setFriction(1.25).setRestitution(0.0), body);
