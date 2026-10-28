@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>작은 새의 방</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; display: grid; place-items: center;
+    background: #f5f4ef; color: #27332e;
+    font-family: system-ui, -apple-system, "Noto Sans KR", sans-serif;
+  }
+  main { width: min(760px, 94vw); padding: 22px 0 30px; }
+  h1 { margin: 0 0 6px; font-size: clamp(1.5rem, 4vw, 2rem); }
+  p { margin: 0 0 16px; color: #5d6b63; line-height: 1.6; }
+  .scene {
+    overflow: hidden; border: 2px solid #d8e0d3; border-radius: 18px;
+    background: linear-gradient(#eaf4f8 0%, #f7faf5 78%);
+    box-shadow: 0 10px 28px #344c3c12;
+  }
+  canvas { display: block; width: 100%; height: auto; touch-action: manipulation; }
+  .controls { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 14px; }
+  button {
+    border: 1px solid #c9d8c9; border-radius: 12px; padding: 11px 16px;
+    background: #fff; color: #27332e; font: inherit; font-weight: 650;
+    cursor: pointer; box-shadow: 0 2px 0 #dbe4d9;
+  }
+  button.primary { background: #dcebd7; border-color: #bad2b2; }
+  button:active { transform: translateY(1px); box-shadow: none; }
+  button:focus-visible { outline: 3px solid #729b7b; outline-offset: 3px; }
+  .status { margin-top: 12px; font-size: .95rem; color: #52665a; min-height: 1.6em; }
+  .hint { margin-top: 10px; font-size: .85rem; color: #77847b; }
+</style>
+</head>
+<body>
+<main>
+  <h1>작은 새의 방 🐦</h1>
+  <p>첫 번째 실험: 새가 깡총 뛰고, 중력에 따라 내려와 바닥에 착지합니다.</p>
+  <section class="scene" aria-label="작은 새가 움직이는 2D 장면">
+    <canvas id="world" width="720" height="360" aria-label="하늘과 풀밭 위의 픽셀 새"></canvas>
+  </section>
+  <div class="controls">
+    <button class="primary" id="jump">깡총 뛰기</button>
+    <button id="left" aria-label="새를 왼쪽으로 이동">← 왼쪽</button>
+    <button id="right" aria-label="새를 오른쪽으로 이동">오른쪽 →</button>
+    <button id="reset">처음으로</button>
+  </div>
+  <div class="status" id="status" role="status">새가 바닥에 서 있어요. 버튼이나 스페이스바를 눌러 보세요.</div>
+  <div class="hint">키보드: Space = 점프 · ← / → = 이동 · R = 초기화</div>
+</main>
+<script>
+(() => {
+  const canvas = document.getElementById('world');
+  const ctx = canvas.getContext('2d');
+  const status = document.getElementById('status');
+  const W = canvas.width, H = canvas.height;
+  const groundY = 286;
+  const bird = { x: 150, y: groundY, vx: 0, vy: 0, grounded: true, facing: 1 };
+  const gravity = 1050; // pixels / second²
+  const jumpVelocity = -430; // pixels / second
+  const moveSpeed = 190; // pixels / second
+  let lastTime = 0;
+  let hops = 0;
+
+  function pixel(x, y, w, h, color) {
+    ctx.fillStyle = color;
+    ctx.fillRect(Math.round(x), Math.round(y), w, h);
+  }
+  function drawBird() {
+    // A small original pixel bird, drawn from simple rectangles.
+    const x = Math.round(bird.x), y = Math.round(bird.y);
+    ctx.save();
+    if (bird.facing < 0) {
+      ctx.translate(x * 2, 0);
+      ctx.scale(-1, 1);
+    }
+    // shadow
+    ctx.globalAlpha = Math.max(.12, 1 - Math.max(0, groundY - bird.y) / 190);
+    pixel(x - 21, groundY + 5, 42, 5, '#7c9b80');
+    ctx.globalAlpha = 1;
+    // tail
+    pixel(x - 23, y - 34, 12, 12, '#5f91a2');
+    pixel(x - 28, y - 28, 8, 8, '#5f91a2');
+    // body
+    pixel(x - 17, y - 38, 30, 25, '#6eabc0');
+    pixel(x - 12, y - 44, 23, 13, '#6eabc0');
+    pixel(x - 7, y - 19, 17, 6, '#6eabc0');
+    // belly
+    pixel(x - 5, y - 25, 17, 11, '#f4e4b6');
+    // wing changes slightly while airborne
+    const wingY = bird.grounded ? y - 32 : y - 39;
+    pixel(x - 9, wingY, 15, 12, '#477f95');
+    pixel(x - 4, wingY + 3, 8, 6, '#8dc2cf');
+    // head and cheek
+    pixel(x + 4, y - 49, 15, 15, '#6eabc0');
+    pixel(x + 14, y - 41, 5, 5, '#e9a4a0');
+    // eye and beak
+    pixel(x + 14, y - 45, 3, 3, '#243a3d');
+    pixel(x + 19, y - 41, 9, 5, '#e7b65f');
+    pixel(x - 7, y - 7, 5, 8, '#c48b4b');
+    pixel(x + 7, y - 7, 5, 8, '#c48b4b');
+    ctx.restore();
+  }
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    // soft clouds
+    ctx.globalAlpha = .65;
+    pixel(95, 70, 66, 10, '#ffffff');
+    pixel(112, 60, 40, 12, '#ffffff');
+    pixel(490, 104, 82, 10, '#ffffff');
+    pixel(512, 93, 38, 12, '#ffffff');
+    ctx.globalAlpha = 1;
+    // distant hills
+    ctx.fillStyle = '#d8e8d4';
+    ctx.beginPath(); ctx.moveTo(0, 276); ctx.quadraticCurveTo(150, 218, 300, 276);
+    ctx.lineTo(470, 276); ctx.quadraticCurveTo(600, 230, 720, 268);
+    ctx.lineTo(720, 360); ctx.lineTo(0, 360); ctx.fill();
+    // ground
+    pixel(0, groundY, W, H-groundY, '#a8c99c');
+    pixel(0, groundY, W, 5, '#7da87b');
+    // little grass tufts
+    for (let x=20; x<W; x+=48) {
+      pixel(x, groundY-7, 3, 7, '#719c70');
+      pixel(x+4, groundY-4, 3, 4, '#719c70');
+    }
+    // tiny flowers
+    for (const x of [70, 320, 570, 660]) {
+      pixel(x, groundY+24, 4, 4, '#f4e8b8');
+      pixel(x+4, groundY+28, 3, 3, '#eaa6a2');
+    }
+    drawBird();
+  }
+  function setStatus() {
+    if (!bird.grounded) status.textContent = '깡총! 중력에 따라 내려오는 중이에요.';
+    else status.textContent = hops ? `착지했어요. 지금까지 점프 ${hops}회.` : '새가 바닥에 서 있어요. 버튼이나 스페이스바를 눌러 보세요.';
+  }
+  function jump() {
+    if (!bird.grounded) return;
+    bird.vy = jumpVelocity;
+    bird.grounded = false;
+    hops++;
+    setStatus();
+  }
+  function nudge(direction) {
+    bird.vx = direction * moveSpeed;
+    bird.facing = direction;
+    if (bird.grounded) {
+      bird.vy = -80;
+      bird.grounded = false;
+    }
+  }
+  function reset() {
+    bird.x = 150; bird.y = groundY; bird.vx = 0; bird.vy = 0; bird.grounded = true; bird.facing = 1;
+    hops = 0; setStatus(); draw();
+  }
+  function frame(time) {
+    const dt = lastTime ? Math.min((time-lastTime)/1000, .03) : 0;
+    lastTime = time;
+    if (!bird.grounded) {
+      bird.vy += gravity * dt;
+      bird.y += bird.vy * dt;
+      bird.x += bird.vx * dt;
+      bird.vx *= Math.pow(.03, dt); // ground/air drag approximation
+      if (bird.y >= groundY) {
+        bird.y = groundY; bird.vy = 0; bird.grounded = true;
+        if (Math.abs(bird.vx) < 8) bird.vx = 0;
+        setStatus();
+      }
+    } else {
+      bird.x += bird.vx * dt;
+      bird.vx *= Math.pow(.015, dt);
+      if (Math.abs(bird.vx) < 2) bird.vx = 0;
+    }
+    bird.x = Math.max(32, Math.min(W-40, bird.x));
+    draw();
+    requestAnimationFrame(frame);
+  }
+  document.getElementById('jump').addEventListener('click', jump);
+  document.getElementById('left').addEventListener('click', () => nudge(-1));
+  document.getElementById('right').addEventListener('click', () => nudge(1));
+  document.getElementById('reset').addEventListener('click', reset);
+  window.addEventListener('keydown', e => {
+    if (e.code === 'Space') { e.preventDefault(); jump(); }
+    if (e.code === 'ArrowLeft') nudge(-1);
+    if (e.code === 'ArrowRight') nudge(1);
+    if (e.key.toLowerCase() === 'r') reset();
+  });
+  draw();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
